@@ -25,7 +25,7 @@
     "openai": "^4.86.1",
     "twilio": "^5.4.5",
     "ws": "^8.18.1",
-    "zod": "^3.24.2"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/node": "^22.13.9",
