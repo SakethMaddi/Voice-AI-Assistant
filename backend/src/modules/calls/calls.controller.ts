@@ -35,11 +35,17 @@ export class CallsController {
     const agentToken = await livekitService.generateAgentToken(livekitRoomId, 'sales_rep');
     const customerToken = await livekitService.generateCustomerToken(livekitRoomId, 'customer_phone');
 
-    // 4. Initiate Twilio Call
+    // 4. Determine public backend URL from request headers if available
+    const hostHeader = (req.headers['x-forwarded-host'] || req.headers.host) as string | undefined;
+    const protoHeader = (req.headers['x-forwarded-proto'] || (req.protocol === 'https' ? 'https' : 'http')) as string;
+    const publicBackendUrl = hostHeader ? `${protoHeader}://${hostHeader}` : env.BACKEND_URL;
+
+    // 5. Initiate Twilio Call
     const twilioResult = await twilioService.initiateCall(
       customerPhoneNumber,
       uniqueId,
-      livekitRoomId
+      livekitRoomId,
+      publicBackendUrl
     );
 
     // 5. Save Call Record

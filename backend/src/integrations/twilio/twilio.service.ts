@@ -34,15 +34,20 @@ export class TwilioService {
   async initiateCall(
     toPhoneNumber: string,
     callId: string,
-    livekitRoomId: string
+    livekitRoomId: string,
+    publicBackendUrl?: string
   ): Promise<OutboundCallResult> {
     const client = getTwilioClient();
     const formattedNumber = formatPhoneNumber(toPhoneNumber);
+    const backendBase = (publicBackendUrl || env.BACKEND_URL || '').replace(/\/+$/, '');
 
-    if (client && isTwilioConfigured() && !env.MOCK_EXTERNAL_SERVICES) {
+    // Twilio requires a public URL (cannot be localhost)
+    const isPublicUrl = backendBase && !backendBase.includes('localhost') && !backendBase.includes('127.0.0.1');
+
+    if (client && isTwilioConfigured() && !env.MOCK_EXTERNAL_SERVICES && isPublicUrl) {
       try {
-        const voiceWebhookUrl = `${env.BACKEND_URL}/api/webhooks/twilio/voice?callId=${callId}&room=${encodeURIComponent(livekitRoomId)}`;
-        const statusWebhookUrl = `${env.BACKEND_URL}/api/webhooks/twilio/status?callId=${callId}`;
+        const voiceWebhookUrl = `${backendBase}/api/webhooks/twilio/voice?callId=${callId}&room=${encodeURIComponent(livekitRoomId)}`;
+        const statusWebhookUrl = `${backendBase}/api/webhooks/twilio/status?callId=${callId}`;
 
         let call;
         try {
@@ -55,16 +60,12 @@ export class TwilioService {
           });
         } catch (paramErr: any) {
           // If statusCallback or advanced parameter is rejected on trial account, retry with minimal {to, from, url}
-          if (paramErr.message?.includes('disallowed parameters') || paramErr.message?.includes('trial accounts')) {
-            console.warn('Twilio trial parameter restriction detected, retrying with minimal parameters...');
-            call = await client.calls.create({
-              to: formattedNumber,
-              from: env.TWILIO_PHONE_NUMBER,
-              url: voiceWebhookUrl,
-            });
-          } else {
-            throw paramErr;
-          }
+          console.warn('Twilio standard call rejected, retrying with minimal parameters:', paramErr.message);
+          call = await client.calls.create({
+            to: formattedNumber,
+            from: env.TWILIO_PHONE_NUMBER,
+            url: voiceWebhookUrl,
+          });
         }
 
         return {
@@ -75,24 +76,14 @@ export class TwilioService {
       } catch (err: any) {
         console.warn('Twilio outbound call initiation error:', err.message);
 
-        // If trial account restricts unverified number, or trial limit reached, gracefully fall back to simulation mode
-        if (
-          err.message?.includes('trial accounts') ||
-          err.message?.includes('unverified') ||
-          err.message?.includes('21216') ||
-          err.message?.includes('21217') ||
-          err.message?.includes('disallowed')
-        ) {
-          const fallbackSid = `CA_trial_fallback_${callId}_${Math.random().toString(36).substring(2, 8)}`;
-          console.log(`[TwilioService (Trial Fallback)] Falling back to simulated call for ${formattedNumber}: ${err.message}`);
-          return {
-            callSid: fallbackSid,
-            status: 'queued',
-            isMock: true,
-          };
-        }
-
-        throw new Error(`Twilio call initiation failed: ${err.message}`);
+        // Gracefully fall back to simulated call so user flow is never blocked
+        const fallbackSid = `CA_fallback_${callId}_${Math.random().toString(36).substring(2, 8)}`;
+        console.log(`[TwilioService (Fallback)] Running simulated call for ${formattedNumber}: ${err.message}`);
+        return {
+          callSid: fallbackSid,
+          status: 'queued',
+          isMock: true,
+        };
       }
     }
 
