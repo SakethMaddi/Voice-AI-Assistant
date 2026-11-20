@@ -10,7 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:push": "prisma db push",
-    "test": "vitest run",
+    "test": "MOCK_EXTERNAL_SERVICES=true NODE_ENV=test vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit"
   },

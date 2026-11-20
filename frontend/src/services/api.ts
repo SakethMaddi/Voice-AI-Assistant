@@ -1,6 +1,7 @@
 import { CallRecord, CallReportData, TranscriptItem } from '../types/call.js';
+import { getApiBaseUrl } from '../utils/config.js';
 
-const API_BASE = '/api';
+const getBase = () => getApiBaseUrl();
 
 export interface InitiateCallResponse {
   callId: string;
@@ -19,7 +20,7 @@ export const api = {
     customerPhoneNumber: string,
     simulatedScenario = 'standard'
   ): Promise<InitiateCallResponse> {
-    const res = await fetch(`${API_BASE}/calls/initiate`, {
+    const res = await fetch(`${getBase()}/calls/initiate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ customerPhoneNumber, simulatedScenario }),
@@ -32,7 +33,7 @@ export const api = {
   },
 
   async endCall(callId: string, callOutcome = 'Call completed'): Promise<{ success: boolean; call: CallRecord; report: CallReportData }> {
-    const res = await fetch(`${API_BASE}/calls/${callId}/end`, {
+    const res = await fetch(`${getBase()}/calls/${callId}/end`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ callOutcome }),
@@ -45,25 +46,25 @@ export const api = {
   },
 
   async getCall(callId: string): Promise<CallRecord> {
-    const res = await fetch(`${API_BASE}/calls/${callId}`);
+    const res = await fetch(`${getBase()}/calls/${callId}`);
     if (!res.ok) throw new Error('Call not found');
     return res.json();
   },
 
   async listCalls(): Promise<CallRecord[]> {
-    const res = await fetch(`${API_BASE}/calls`);
+    const res = await fetch(`${getBase()}/calls`);
     if (!res.ok) throw new Error('Failed to fetch call history');
     return res.json();
   },
 
   async getCallTranscript(callId: string): Promise<TranscriptItem[]> {
-    const res = await fetch(`${API_BASE}/calls/${callId}/transcript`);
+    const res = await fetch(`${getBase()}/calls/${callId}/transcript`);
     if (!res.ok) throw new Error('Failed to fetch transcript');
     return res.json();
   },
 
   async getCallReport(callId: string): Promise<CallReportData> {
-    const res = await fetch(`${API_BASE}/calls/${callId}/report`);
+    const res = await fetch(`${getBase()}/calls/${callId}/report`);
     if (!res.ok) throw new Error('Failed to fetch call report');
     return res.json();
   },
@@ -76,7 +77,7 @@ export const api = {
       notes?: string | null;
     }
   ) {
-    const res = await fetch(`${API_BASE}/suggestions/${suggestionId}/feedback`, {
+    const res = await fetch(`${getBase()}/suggestions/${suggestionId}/feedback`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(feedback),
@@ -86,7 +87,7 @@ export const api = {
   },
 
   async analyzeStatement(callId: string, statement: string, speaker: 'customer' | 'agent' = 'customer') {
-    const res = await fetch(`${API_BASE}/objections/analyze`, {
+    const res = await fetch(`${getBase()}/objections/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ callId, customerStatement: statement, speaker }),

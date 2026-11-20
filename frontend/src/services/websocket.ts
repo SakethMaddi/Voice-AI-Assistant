@@ -1,3 +1,5 @@
+import { getWebSocketUrl } from '../utils/config.js';
+
 export type WebSocketEventHandler = (event: string, data: any) => void;
 
 class WebSocketClient {
@@ -16,10 +18,7 @@ class WebSocketClient {
       return;
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // If running in Vite dev with proxy, use current host, fallback to localhost:5000
-    const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/ws`;
+    const wsUrl = getWebSocketUrl();
 
     try {
       this.ws = new WebSocket(wsUrl);
@@ -131,6 +130,18 @@ class WebSocketClient {
     }, delay);
   }
 
+  forceReconnect() {
+    if (this.ws) {
+      this.isExplicitlyClosed = true;
+      try {
+        this.ws.close();
+      } catch {}
+      this.ws = null;
+    }
+    this.reconnectAttempts = 0;
+    this.connect();
+  }
+
   disconnect() {
     this.isExplicitlyClosed = true;
     clearTimeout(this.reconnectTimer);
@@ -142,3 +153,4 @@ class WebSocketClient {
 }
 
 export const wsClient = new WebSocketClient();
+export const websocketService = wsClient;
