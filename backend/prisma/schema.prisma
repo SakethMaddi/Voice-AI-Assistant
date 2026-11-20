@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Call {
+  id                  String         @id @default(cuid())
+  customerPhoneNumber String
+  twilioCallSid       String?        @unique
+  livekitRoomId       String         @unique
+  status              String         @default("INITIATED") // INITIATED, RINGING, IN_PROGRESS, COMPLETED, FAILED, NO_ANSWER
+  startTime           DateTime?
+  endTime             DateTime?
+  duration            Int?           // In seconds
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  transcripts         Transcript[]
+  objections          Objection[]
+  reports             CallReport[]
+
+  @@index([customerPhoneNumber])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Transcript {
+  id        String   @id @default(cuid())
+  callId    String
+  call      Call     @relation(fields: [callId], references: [id], onDelete: Cascade)
+  speaker   String   // "agent" | "customer"
+  text      String
+  isFinal   Boolean  @default(true)
+  timestamp DateTime @default(now())
+
+  @@index([callId])
+  @@index([timestamp])
+}
+
+model Objection {
+  id                String         @id @default(cuid())
+  callId            String
+  call              Call           @relation(fields: [callId], references: [id], onDelete: Cascade)
+  category          String         // e.g. "Pricing or budget concerns", "Already using another provider", etc.
+  customerStatement String
+  customerIntent    String
+  sentiment         String         // e.g. "negative", "neutral", "positive"
+  confidence        Float          // 0.0 - 1.0
+  detectedAt        DateTime       @default(now())
+
+  suggestions       AISuggestion[]
+
+  @@index([callId])
+  @@index([category])
+  @@index([detectedAt])
+}
+
+model AISuggestion {
+  id                   String          @id @default(cuid())
+  objectionId          String
+  objection            Objection       @relation(fields: [objectionId], references: [id], onDelete: Cascade)
+  primaryResponse      String
+  alternativeResponses String          // JSON array of strings: string[]
+  rationale            String          // Explanation of the recommended approach
+  sentimentAnalysis    String          // Additional sentiment breakdown
+  createdAt            DateTime        @default(now())
+
+  feedbacks            AgentFeedback[]
+
+  @@index([objectionId])
+}
+
+model AgentFeedback {
+  id                String       @id @default(cuid())
+  suggestionId      String
+  suggestion        AISuggestion @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  status            String       // "ACCEPTED" | "REJECTED" | "EDITED"
+  editedResponse    String?
+  notes             String?
+  feedbackTimestamp DateTime     @default(now())
+
+  @@index([suggestionId])
+  @@index([status])
+}
+
+model CallReport {
+  id                     String   @id @default(cuid())
+  callId                 String
+  call                   Call     @relation(fields: [callId], references: [id], onDelete: Cascade)
+  objectionReport        String   // JSON string
+  agentPerformanceReport String   // JSON string
+  aiAccuracyReport       String   // JSON string
+  createdAt              DateTime @default(now())
+
+  @@index([callId])
+  @@index([createdAt])
+}

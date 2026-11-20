@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: voice_ai_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: voice_ai_assistant
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: voice_ai_backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5001:5001"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/voice_ai_assistant?schema=public
+      PORT: 5001
+      HOST: 0.0.0.0
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-AC_placeholder}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-placeholder}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-+15551234567}
+      LIVEKIT_URL: ${LIVEKIT_URL:-https://mock-livekit.livekit.cloud}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
+      LIVEKIT_SIP_URI: ${LIVEKIT_SIP_URI:-sip:voiceai@sip.livekit.cloud}
+      LIVEKIT_SIP_USERNAME: ${LIVEKIT_SIP_USERNAME:-}
+      LIVEKIT_SIP_PASSWORD: ${LIVEKIT_SIP_PASSWORD:-}
+      LIVEKIT_SIP_DOMAIN: ${LIVEKIT_SIP_DOMAIN:-sip.livekit.cloud}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-placeholder}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      BACKEND_URL: ${BACKEND_URL:-http://localhost:5001}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      MOCK_EXTERNAL_SERVICES: ${MOCK_EXTERNAL_SERVICES:-true}
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: voice_ai_frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
