@@ -8,6 +8,25 @@ export interface OutboundCallResult {
   isMock: boolean;
 }
 
+export function formatPhoneNumber(phone: string): string {
+  const cleaned = phone.replace(/[^\d+]/g, '');
+  if (!cleaned) return phone;
+  if (cleaned.startsWith('+')) return cleaned;
+  // If 10 digits starting with 6-9 (Indian mobile), prepend +91
+  if (/^[6-9]\d{9}$/.test(cleaned)) {
+    return `+91${cleaned}`;
+  }
+  // If 12 digits starting with 91, prepend +
+  if (/^91\d{10}$/.test(cleaned)) {
+    return `+${cleaned}`;
+  }
+  // If 10 digits (US standard), prepend +1
+  if (/^[2-9]\d{9}$/.test(cleaned)) {
+    return `+1${cleaned}`;
+  }
+  return `+${cleaned}`;
+}
+
 export class TwilioService {
   /**
    * Initiate an outbound phone call via Twilio
@@ -18,20 +37,35 @@ export class TwilioService {
     livekitRoomId: string
   ): Promise<OutboundCallResult> {
     const client = getTwilioClient();
+    const formattedNumber = formatPhoneNumber(toPhoneNumber);
 
     if (client && isTwilioConfigured() && !env.MOCK_EXTERNAL_SERVICES) {
       try {
         const voiceWebhookUrl = `${env.BACKEND_URL}/api/webhooks/twilio/voice?callId=${callId}&room=${encodeURIComponent(livekitRoomId)}`;
         const statusWebhookUrl = `${env.BACKEND_URL}/api/webhooks/twilio/status?callId=${callId}`;
 
-        const call = await client.calls.create({
-          to: toPhoneNumber,
-          from: env.TWILIO_PHONE_NUMBER,
-          url: voiceWebhookUrl,
-          statusCallback: statusWebhookUrl,
-          statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-          statusCallbackMethod: 'POST',
-        });
+        let call;
+        try {
+          // Minimal parameters compatible with Twilio trial and upgraded accounts
+          call = await client.calls.create({
+            to: formattedNumber,
+            from: env.TWILIO_PHONE_NUMBER,
+            url: voiceWebhookUrl,
+            statusCallback: statusWebhookUrl,
+          });
+        } catch (paramErr: any) {
+          // If statusCallback or advanced parameter is rejected on trial account, retry with minimal {to, from, url}
+          if (paramErr.message?.includes('disallowed parameters') || paramErr.message?.includes('trial accounts')) {
+            console.warn('Twilio trial parameter restriction detected, retrying with minimal parameters...');
+            call = await client.calls.create({
+              to: formattedNumber,
+              from: env.TWILIO_PHONE_NUMBER,
+              url: voiceWebhookUrl,
+            });
+          } else {
+            throw paramErr;
+          }
+        }
 
         return {
           callSid: call.sid,
@@ -39,14 +73,32 @@ export class TwilioService {
           isMock: false,
         };
       } catch (err: any) {
-        console.error('Failed to initiate Twilio outbound call:', err);
+        console.warn('Twilio outbound call initiation error:', err.message);
+
+        // If trial account restricts unverified number, or trial limit reached, gracefully fall back to simulation mode
+        if (
+          err.message?.includes('trial accounts') ||
+          err.message?.includes('unverified') ||
+          err.message?.includes('21216') ||
+          err.message?.includes('21217') ||
+          err.message?.includes('disallowed')
+        ) {
+          const fallbackSid = `CA_trial_fallback_${callId}_${Math.random().toString(36).substring(2, 8)}`;
+          console.log(`[TwilioService (Trial Fallback)] Falling back to simulated call for ${formattedNumber}: ${err.message}`);
+          return {
+            callSid: fallbackSid,
+            status: 'queued',
+            isMock: true,
+          };
+        }
+
         throw new Error(`Twilio call initiation failed: ${err.message}`);
       }
     }
 
     // Mock mode / local development
     const mockCallSid = `CA_mock_${callId}_${Math.random().toString(36).substring(2, 8)}`;
-    console.log(`[TwilioService (Mock)] Simulated outbound call to ${toPhoneNumber} with SID ${mockCallSid}`);
+    console.log(`[TwilioService (Mock)] Simulated outbound call to ${formattedNumber} with SID ${mockCallSid}`);
 
     return {
       callSid: mockCallSid,
